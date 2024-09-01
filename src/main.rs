@@ -1,29 +1,102 @@
 mod subtitle;
+mod upload_subtitles;
+mod search_engine;
 
 use regex::Regex;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
+use std::net::SocketAddr;
 use std::ops::Index;
-use crate::subtitle::ass::Ass;
+use std::time::Duration;
+use crate::subtitle::ass;
 use crate::subtitle::srt::Srt;
 use crate::subtitle::Subtitle;
 
-fn main() -> io::Result<()> {
-    //Specify the path to the file you want to read from
-    let filename = r#"C:\rock\doc\english\字幕\Modern Family S01-08\摩登家庭第一季Modern Family Season 01 S01 1080p Bluray 10bit AAC 5.1 x265 HEVC-LION[UTR]\Modern.Family.S01.E02.1080p.Bluray.AAC.5.1.x265-LION.ass"#;
-   // let filename = r#"C:\rock\doc\english\字幕\★《绝望主妇》Desperate Housewives (2004-2011)[1080P]美国（共8季）【完全版】\《绝望主妇 第1季》 Desperate Housewives Season 1 (2004)[1080P]美国（共23集）\Desperate.Housewives.S01E01.1080p.WEB-DL.DD+.5.1.x264-TrollHD.srt"#;
-    let text = std::fs::read_to_string(filename).unwrap();
-    let ass = Ass::parse(text.as_str());
-    for d in ass.unwrap().dialogues {
-        println!("{:?}", d.split_en_che());
-        break;
-    }
+use anyhow::{anyhow, Context};
+use axum::error_handling::HandleErrorLayer;
+use axum::http::StatusCode;
+use axum::BoxError;
+use axum::{routing::get, Router};
 
+use http::header::HeaderName;
+use tower::{timeout::TimeoutLayer, ServiceBuilder};
+use tower_http::propagate_header::PropagateHeaderLayer;
+use tower_http::request_id::SetRequestIdLayer;
+use tower_http::trace::TraceLayer;
+use tracing::level_filters::LevelFilter;
+use tracing::{info, warn};
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{fmt, EnvFilter, Registry};
+
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    init_log_context()?;
+    // schedule::start_schedule();
+    start().await
+}
+
+fn init_log_context() -> anyhow::Result<()> {
+    // TODO
+    let file_appender = tracing_appender::rolling::daily(
+        "C:/rock/coding/code/my/rust/programmer-investment-research/api/tmp",
+        "app.log",
+    );
+    let filter = EnvFilter::from_default_env().add_directive(LevelFilter::INFO.into());
+    let subscriber = Registry::default()
+        .with(
+            fmt::layer()
+                .compact()
+                .with_ansi(true)
+                .with_file(false)
+                .with_line_number(false)
+                .with_thread_ids(false)
+                .with_target(false)
+            // .with_span_events(FmtSpan::CLOSE),
+        )
+        .with(
+            fmt::layer()
+                .with_ansi(false)
+                .with_writer(file_appender)
+                .with_file(false)
+                .with_line_number(false)
+                .with_thread_ids(false)
+                .with_target(false)
+            //  .with_span_events(FmtSpan::CLOSE),
+        )
+        .with(filter);
+    tracing::subscriber::set_global_default(subscriber).map_err(|e| anyhow!(e))?;
     Ok(())
 }
 
+async fn start() -> anyhow::Result<()> {
+    let x_request_id = HeaderName::from_static("x-request-id");
+    let layers = ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|_: BoxError| async {
+            StatusCode::REQUEST_TIMEOUT
+        }))
+        //.layer(PropagateHeaderLayer::new(x_request_id))
+        .layer(TimeoutLayer::new(Duration::from_secs(
+            30,
+        )));
 
-// let gbk_bytes = vec![0xC4, 0xE3, 0xBA, 0xC3]; // 这是 "中文" 的 GBK 编码
-//
-// // 使用 GBK 解码器来解码字节
-// let decoded_str = GBK.decode(&gbk_bytes).unwrap();
+    let app = register_routes().layer(layers);
+    let address = SocketAddr::from(([127, 0, 0, 1], 8080));
+    axum_server::bind(address)
+        .serve(app.into_make_service())
+        .await?;
+    Ok(())
+}
+
+fn register_routes() -> Router {
+    Router::new()
+        //  .typed_route(controller::tmp::item_handler)
+        .route("/", get(root))
+          // .on_response(|response: &Response, latency: Duration, _: &'_ _| {})
+}
+
+
+async fn root() -> String {
+    return "Welcome!".to_string();
+}

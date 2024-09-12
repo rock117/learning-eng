@@ -1,6 +1,7 @@
-mod search_service;
+mod engine;
 mod index;
-
+mod search_service;
+mod document;
 
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
@@ -8,10 +9,39 @@ use tantivy::schema::*;
 use tantivy::{doc, DocAddress, Index, IndexWriter, ReloadPolicy};
 use tempfile::TempDir;
 
+#[derive(Debug, Copy, Clone)]
+pub enum SearchType {
+    Paragraph,
+    Dialogue,
+}
+
+pub struct Article {
+    id: String,
+    source: String,
+    title: String,
+    paragraphs: Vec<Paragraph>,
+}
+
+pub struct Paragraph {
+    article_id: String,
+    text: String,
+    chn: Option<String>,
+    prev: Option<Box<Paragraph>>,
+    next: Option<Box<Paragraph>>,
+}
+
+#[derive(Clone)]
+pub struct Dialogue {
+    se_id: String,
+    start: String,
+    end: String,
+    text: String,
+    chn: Option<String>,
+    prev: Option<Box<Dialogue>>,
+    next: Option<Box<Dialogue>>,
+}
+
 pub fn test() -> tantivy::Result<()> {
-
-
-
     let index_path = TempDir::new().unwrap();
     let mut schema_builder = Schema::builder();
     schema_builder.add_text_field("title", TEXT | STORED);
@@ -31,8 +61,6 @@ pub fn test() -> tantivy::Result<()> {
         "He was an old man who fished alone in a skiff in the Gulf Stream and he had gone \
          eighty-four days now without taking a fish.",
     );
-
-
 
     index_writer.add_document(old_man_doc)?;
     index_writer.add_document(doc!(
@@ -55,7 +83,6 @@ pub fn test() -> tantivy::Result<()> {
              yesterday, and my first task is to assure my dear sister of my welfare and \
              increasing confidence in the success of my undertaking."
     ))?;
-
 
     index_writer.commit()?;
 

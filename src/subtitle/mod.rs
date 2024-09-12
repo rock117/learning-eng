@@ -27,12 +27,18 @@ impl Dialogue {
         let ch_index = text.find("{");
         let eng_index = text.rfind("}");
         let ch = if let Some(ch_index) = ch_index {
-            (&text[0..ch_index]).to_string().replace("\n", "").replace("\r", "")
+            (&text[0..ch_index])
+                .to_string()
+                .replace("\n", "")
+                .replace("\r", "")
         } else {
             "".into()
         };
         let eng = if let Some(eng_index) = eng_index {
-            (&text[eng_index + 1..text.len()]).to_string().replace("\n", "").replace("\r", "")
+            (&text[eng_index + 1..text.len()])
+                .to_string()
+                .replace("\n", "")
+                .replace("\r", "")
         } else {
             "".into()
         };
